@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#373435" />
+  <meta name="description" content="Escala de Trabalho UTFPR 2026. Escolha disponibilidades, configure rodízio, visualize e exporte a escala." />
+  <meta name="color-scheme" content="light" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Escala de Trabalho • UTFPR | DEPRO-LD</title>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <div class="brand"><div class="brand-mark" aria-hidden="true"><span>U</span></div><div><b>DEPRO–LD</b><small>UTFPR · LONDRINA</small></div></div>
+      <div class="sidebar-rule"></div>
+      <p class="sidebar-label">ESPAÇO DE TRABALHO</p>
+      <nav class="nav-list" id="main-nav">
+        <button class="nav-btn active" data-nav="escala"><span class="nav-icon">▦</span> Escala de trabalho</button>
+        <button class="nav-btn" data-nav="disponibilidade"><span class="nav-icon">◫</span> Disponibilidades</button>
+        <button class="nav-btn" data-nav="resumo"><span class="nav-icon">▥</span> Resumo anual</button>
+        <button class="nav-btn" data-nav="calendario"><span class="nav-icon">▤</span> Calendário administrativo</button>
+      </nav>
+      <div class="sidebar-bottom"><span class="version-dot"></span> BETA 0.1 <span class="muted-side">· 2026</span><p>Escala sujeita à conferência e aprovação administrativa.</p></div>
+    </aside>
+    <main class="main-area">
+      <header class="topbar">
+        <button class="mobile-brand" id="mobile-menu" aria-label="Abrir menu">☰</button>
+        <div class="breadcrumbs"><span>UTFPR</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Escala de trabalho</strong></div>
+        <div class="top-actions"><span class="status" id="sync-status"><span class="status-dot"></span> Dados locais</span><span class="year-pill">2026</span></div>
+      </header>
+      <div class="content" id="view-root"></div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="import-file" type="file" accept="application/json,.json" hidden />
+  <script src="./config.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
