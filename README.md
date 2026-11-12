@@ -1,17 +1,17 @@
-# Escala de Trabalho UTFPR — PWA Beta 0.1
+# Escala de Trabalho UTFPR — PWA Beta 0.2
 
 PWA estático pronto para GitHub Pages, com escala anual de 2026, visualização por dia/semana/mês/ano e geração de PDF diretamente no navegador. Sem login, sem Python, sem Node no computador do usuário e sem serviços de geração de PDF.
 
 ## O que está implementado
 
 - Calendário administrativo UTFPR 2026 transcrito da imagem fornecida, incluindo feriados, recessos e horário especial de 21 a 31/12 (fora da escala ordinária).
-- Oito servidores e respectivos departamentos / dias habituais.
+- Oito servidores e respectivos departamentos. Dias previamente cadastrados são apenas sugestões iniciais, livremente editáveis.
 - Escolha do dia de rodízio entre segunda e sexta; terça-feira é a configuração inicial.
-- Igor só trabalha às quintas e não integra o rodízio; Vanessa nunca trabalha às quartas.
+- **Todos os cinco dias úteis estão liberados para todos os servidores**, sem bloqueio especial para Igor, Vanessa ou Letícia.
 - Dois servidores de departamentos diferentes por dia, sempre que as disponibilidades permitem.
 - Priorização de ao menos uma participação semanal por pessoa quando viável; distribuição de dias adicionais e rodízios ponderada pelos totais do ano.
-- Exceções individuais por data: **indisponível** ou **disponível**. Bloqueio específico sempre prevalece.
-- Caso a quarta-feira seja o dia de rodízio, quando Letícia tiver dois comparecimentos naquela semana incluindo a quarta, o outro será na terça-feira.
+- Exceções individuais por data: **indisponível** ou **disponível**. A exceção específica sempre prevalece sobre a seleção semanal.
+- Todos os servidores podem ser selecionados no dia do rodízio, desde que marquem esse dia ou cadastrem exceção de disponibilidade. Não há regras fixas pessoais de dias.
 - Alertas quando faltarem servidores ou a disponibilidade impedir distribuição semanal ideal.
 - Visão diária, semanal, mensal ou anual com tabela e relatórios de comparecimentos.
 - Botão para **baixar PDF** da visão escolhida, sem dependência externa.
@@ -67,11 +67,11 @@ Para que cada servidor altere suas preferências a partir de qualquer computador
 ## 4. Regras e limites da versão beta
 
 - Ano **2026** apenas, sem recurso de alterar os feriados pela interface. Não extrapole o calendário para 2027.
-- O dia de rodízio substitui as disponibilidades habituais para os sete participantes, exceto restrições rígidas e bloqueios por data.
+- O dia de rodízio não ignora as escolhas: só entram como candidatos os servidores que selecionaram esse dia ou criaram exceção pontual de disponibilidade.
 - Dois servidores do mesmo departamento não são colocados no mesmo dia.
 - O algoritmo tenta maximizar a diversidade semanal, o preenchimento e a equidade anual. Com restrições conflitantes, não garante igualdade matemática; apresenta alertas, em vez de fingir conformidade.
-- Se o rodízio for **quinta**, Igor ocupa normalmente uma vaga do dia e, por ser do DEPRO, Vanessa e Letícia não podem fazer dupla com ele; por isso a participação delas nesse rodízio pode ser zero.
-- Se o rodízio for **sexta**, Letícia tem pouca flexibilidade fora desse dia (quinta conflita com Igor), o que limita o equilíbrio de rodízios.
+- Se a escolha de dias produzir poucas combinações de departamentos, o sistema mostrará vagas pendentes em vez de ignorar as seleções.
+- Cada servidor pode marcar qualquer combinação de segunda a sexta e usar os botões **Marcar todos** e **Desmarcar todos**.
 - No modo local, alterações de vários usuários não são sincronizadas entre dispositivos. Para produção, o modo compartilhado requer controles adicionais de escrita/auditoria.
 - A geração do PDF é implementada com fontes internas padrão do formato PDF e pode usar substituições para símbolos raros, mas suporta os nomes e acentos portugueses do cadastro.
 
@@ -91,3 +91,11 @@ A interface pode ser aberta por servidor estático local (`python -m http.server
 - Bloqueio de alteração da escala homologada, mantendo acesso público à leitura.
 - Controle de conflitos de escrita, trilha de auditoria e proteção do endpoint contra abuso.
 - Inclusão do calendário de 2027 por importação.
+
+## 7. Atualização da beta 0.1 para 0.2
+
+- **Novo:** segunda, terça, quarta, quinta e sexta ficam habilitadas para todos os servidores.
+- **Removido:** bloqueio de Igor fora da quinta-feira, bloqueio de Vanessa às quartas e regra fixa de Letícia quando a quarta era rodízio.
+- **Corrigido:** a escala respeita rigorosamente os dias selecionados, inclusive no rodízio.
+- **Migração:** dados de disponibilidade salvos no navegador na beta 0.1 são reaproveitados, sem forçar os bloqueios anteriores. As seleções não são alteradas automaticamente; abra **Disponibilidades** e marque os dias que desejar.
+- **Atualização no GitHub:** substitua os arquivos da versão 0.1 pelos da versão 0.2 no repositório. O Service Worker usa cache novo (`v02`), permitindo a atualização após recarregar a página.

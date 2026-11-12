@@ -1,4 +1,4 @@
-/* Dados iniciais transcritos dos anexos fornecidos pelo usuário. */
+/* Sugestões iniciais de dias, todas livremente editáveis pelo usuário. */
 export const YEAR = 2026;
 export const WEEKDAYS = ['Segunda','Terça','Quarta','Quinta','Sexta'];
 export const WEEKDAYS_FULL = WEEKDAYS.map(s => s + '-feira');
@@ -51,7 +51,7 @@ export function allDates(){
  return dates;
 }
 export const DATES_2026=allDates();
-export function defaultState(){return {schema:1,year:YEAR,rotationDay:1,people:PEOPLE.map(p=>({...p,days:[...p.days],exceptions:{}})),savedAt:null};}
+export function defaultState(){return {schema:2,year:YEAR,rotationDay:1,people:PEOPLE.map(p=>({...p,days:[...p.days],exceptions:{}})),savedAt:null};}
 export function sanitizeState(raw){
  const out=defaultState();
  if(!raw || typeof raw!=='object')return out;
@@ -62,8 +62,6 @@ export function sanitizeState(raw){
   const other=raw.people.find(p=>p?.id===person.id);
   if(!other)continue;
   if(Array.isArray(other.days))person.days=[...new Set(other.days.map(Number).filter(x=>Number.isInteger(x)&&x>=0&&x<=4))].sort();
-  if(person.id==='igor')person.days=[3];
-  if(person.id==='vanessa')person.days=person.days.filter(x=>x!==2);
   if(other.exceptions && typeof other.exceptions==='object'){
    for(const [date,value] of Object.entries(other.exceptions)){
     if(/^2026-\d\d-\d\d$/.test(date) && getDate(date).toString()!=='Invalid Date' && dateISO(getDate(date))===date && ['on','off'].includes(value))person.exceptions[date]=value;
