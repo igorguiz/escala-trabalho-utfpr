@@ -1,5 +1,5 @@
 /* Exportação PDF nativa, sem CDN: formato PDF 1.4, fontes padrão Helvetica. */
-import {DATES_2026,MONTHS,WEEKDAYS,formatShortDate,getStatus} from './data.js';
+import {DATES_2026,MONTHS,WEEKDAYS,formatShortDate,getStatus} from './data.js?v=0.3.0';
 
 const PAGE_W=595.28,PAGE_H=841.89;
 const latinMap={'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};

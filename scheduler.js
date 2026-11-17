@@ -1,4 +1,4 @@
-import {DATES_2026,weekdayIndex,formatShortDate} from './data.js';
+import {DATES_2026,weekdayIndex,formatShortDate} from './data.js?v=0.3.0';
 
 function mondayISO(iso){const dt=new Date(`${iso}T12:00:00Z`);dt.setUTCDate(dt.getUTCDate()-weekdayIndex(iso));return dt.toISOString().slice(0,10);}
 function allowed(person,day,state){

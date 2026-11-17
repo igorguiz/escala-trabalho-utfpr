@@ -1,4 +1,4 @@
-# Escala de Trabalho UTFPR — PWA Beta 0.2
+# Escala de Trabalho UTFPR — PWA Beta 0.3
 
 PWA estático pronto para GitHub Pages, com escala anual de 2026, visualização por dia/semana/mês/ano e geração de PDF diretamente no navegador. Sem login, sem Python, sem Node no computador do usuário e sem serviços de geração de PDF.
 
@@ -15,7 +15,7 @@ PWA estático pronto para GitHub Pages, com escala anual de 2026, visualização
 - Alertas quando faltarem servidores ou a disponibilidade impedir distribuição semanal ideal.
 - Visão diária, semanal, mensal ou anual com tabela e relatórios de comparecimentos.
 - Botão para **baixar PDF** da visão escolhida, sem dependência externa.
-- Instalação como PWA e cache offline (após primeira visita HTTPS e instalação do Service Worker).
+- Instalação como PWA e cache offline com atualização automática da versão online (após primeira visita HTTPS e instalação do Service Worker).
 - Exportação/importação de arquivo JSON como backup das escolhas em modo local.
 - Sincronização **opcional** com Supabase para que os servidores consultem / alterem os dados de vários computadores.
 
@@ -45,7 +45,7 @@ Para que cada servidor altere suas preferências a partir de qualquer computador
    };
    ```
 
-5. Recarregue a página após a atualização do GitHub Pages (pode ser necessário limpar o cache do PWA).
+5. Recarregue a página após a atualização do GitHub Pages (o PWA verifica automaticamente novas versões; após migrar da Beta 0.2, use uma vez a URL com ?v=0.3.0 se ainda aparecer a tela antiga).
 6. O cabeçalho passará a mostrar **Dados compartilhados**. Os servidores salvam suas disponibilidades no banco; a aplicação atualiza do servidor ao abrir e aproximadamente a cada 60 segundos enquanto estiver ativa.
 
 **Atenção de segurança:** nesta beta, acesso público significa também edição pública. Não há identificação de quem fez uma mudança, aprovação, bloqueio administrativo nem trilha de auditoria. Qualquer visitante com o link pode editar a disponibilidade de qualquer servidor e o rodízio, e pode sobrescrever escolhas anteriores. Não utilize como escala oficialmente homologada sem definir um procedimento de revisão/publicação. Não armazene informações pessoais sensíveis.
@@ -98,4 +98,19 @@ A interface pode ser aberta por servidor estático local (`python -m http.server
 - **Removido:** bloqueio de Igor fora da quinta-feira, bloqueio de Vanessa às quartas e regra fixa de Letícia quando a quarta era rodízio.
 - **Corrigido:** a escala respeita rigorosamente os dias selecionados, inclusive no rodízio.
 - **Migração:** dados de disponibilidade salvos no navegador na beta 0.1 são reaproveitados, sem forçar os bloqueios anteriores. As seleções não são alteradas automaticamente; abra **Disponibilidades** e marque os dias que desejar.
-- **Atualização no GitHub:** substitua os arquivos da versão 0.1 pelos da versão 0.2 no repositório. O Service Worker usa cache novo (`v02`), permitindo a atualização após recarregar a página.
+- **Atualização no GitHub:** substitua os arquivos da versão 0.1 pelos da versão 0.2 no repositório. O Service Worker da Beta 0.3 utiliza rede primeiro e mantém o cache apenas para uso offline.
+
+## 8. Beta 0.3 — atualização automática e dados frescos
+
+- **Corrigido:** o Service Worker deixou de usar `cache-first` para HTML, CSS e JavaScript. A cada navegação/recarregamento com internet, verifica os arquivos da rede com `cache: no-store`; offline, usa a cópia local.
+- **Corrigido:** as URLs dos módulos e estilos usam `?v=0.3.0` para evitar o cache do navegador/versões antigas do worker, e o próprio worker é registrado com `updateViaCache: 'none'`.
+- **Novo:** quando o Service Worker encontra uma versão nova e a ativa, a página recarrega automaticamente, exceto quando há edições não salvas.
+- **Novo:** o botão **Atualizar** recarrega as disponibilidades e o dia de rodízio da fonte efetiva e consulta a existência de versão nova do PWA.
+- **Novo:** ao entrar na página e retornar à aba, o sistema tenta reconsultar a fonte dos dados. No modo Supabase, continua a sincronização a cada 60 s, sem aproveitar cache HTTP.
+- **Novo:** alterações em outras abas do mesmo navegador são detectadas em modo local.
+
+**Atenção: modo local vs. compartilhado.** Sem Supabase configurado, recarregar significa ler o `localStorage` daquele navegador; não há dados para buscar de outros computadores. Para sincronização entre servidores de dispositivos diferentes, configure e proteja adequadamente um banco compartilhado.
+
+**Migração da Beta 0.2:** substitua os arquivos do repositório, em especial `index.html`, `sw.js`, `app.js`, `sync.js`, `styles.css` e módulos de apoio. **Se você já preencheu `config.js` com seu Supabase, preserve esse arquivo configurado; não o substitua pelo exemplo vazio do ZIP.** Como a Beta 0.2 usava cache-first, após publicar abra uma vez `https://SEU-USUARIO.github.io/escala-trabalho-utfpr/?v=0.3.0`. A query distinta permite escapar da página em cache antiga e instalar a nova atualização. Em seguida, acessos e recarregamentos normais verificam a versão atual automaticamente.
+
+**Manutenção:** em versões futuras, atualize a constante `VERSION` do `sw.js` e os parâmetros de revisão de `index.html`/imports (por exemplo `v=0.4.0`). Isso evita que o navegador reutilize código misturado de versões diferentes.

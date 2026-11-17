@@ -1,3 +1,7 @@
 {
- "name":"pwa-escala-utfpr-beta","version":"0.2.0","private":true,"type":"module","description":"PWA estático para escala de trabalho UTFPR"
+  "name": "pwa-escala-utfpr-beta",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "PWA estático para escala de trabalho UTFPR"
 }

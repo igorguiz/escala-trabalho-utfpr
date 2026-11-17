@@ -1,11 +1,11 @@
-import {defaultState,sanitizeState} from './data.js';
-const STORE_KEY='utfpr.escala.2026.beta.v1';
+import {defaultState,sanitizeState} from './data.js?v=0.3.0';
+export const LOCAL_STORE_KEY='utfpr.escala.2026.beta.v1';
 const cfg=window.PWA_CONFIG||{};
 const url=(cfg.supabaseUrl||'').trim().replace(/\/$/,'');
 const key=(cfg.supabaseAnonKey||'').trim();
 export const isShared=Boolean(url && key);
-export function getLocal(){try{const raw=localStorage.getItem(STORE_KEY);return raw?sanitizeState(JSON.parse(raw)):defaultState();}catch{return defaultState();}}
-export function saveLocal(state){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));return true;}catch{return false;}}
+export function getLocal(){try{const raw=localStorage.getItem(LOCAL_STORE_KEY);return raw?sanitizeState(JSON.parse(raw)):defaultState();}catch{return defaultState();}}
+export function saveLocal(state){try{localStorage.setItem(LOCAL_STORE_KEY,JSON.stringify(state));return true;}catch{return false;}}
 async function query(resource,options={}){
  if(!isShared)throw new Error('Banco compartilhado ainda não configurado.');
  const response=await fetch(`${url}/rest/v1/${resource}`,{

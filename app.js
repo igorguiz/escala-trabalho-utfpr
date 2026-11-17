@@ -1,7 +1,7 @@
-import {YEAR,WEEKDAYS,MONTHS,PEOPLE,CALENDAR,DATES_2026,defaultState,sanitizeState,formatShortDate,getStatus} from './data.js';
-import {generateSchedule,validateSchedule} from './scheduler.js';
-import {downloadPDF} from './pdf.js';
-import {isShared,getLocal,saveLocal,fetchShared,saveSharedPerson,saveSharedRotation,downloadJSON} from './sync.js';
+import {YEAR,WEEKDAYS,MONTHS,PEOPLE,CALENDAR,DATES_2026,defaultState,sanitizeState,formatShortDate,getStatus} from './data.js?v=0.3.0';
+import {generateSchedule,validateSchedule} from './scheduler.js?v=0.3.0';
+import {downloadPDF} from './pdf.js?v=0.3.0';
+import {isShared,LOCAL_STORE_KEY,getLocal,saveLocal,fetchShared,saveSharedPerson,saveSharedRotation,downloadJSON} from './sync.js?v=0.3.0';
 
 const root=document.getElementById('view-root');
 const toastEl=document.getElementById('toast');
@@ -19,6 +19,8 @@ const weekStarts=Array.from(new Set(DATES_2026.filter(d=>d.day<5).map(d=>{
 if(!weekStarts.includes(display.week))display.week=weekStarts[0];
 let currentStatus=isShared?'Conectando...':'Dados neste navegador';
 let statusError=false;
+let syncInProgress=false;
+let lastSyncAttempt=0;
 let toastTimer;
 
 const esc=x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
@@ -102,12 +104,42 @@ function renderCalendar(){
 function render(){document.querySelectorAll('[data-nav]').forEach(b=>b.classList.toggle('active',b.dataset.nav===nav));document.getElementById('page-breadcrumb').textContent=navText[nav];refreshStatus();
  if(nav==='escala')renderSchedule();else if(nav==='disponibilidade')renderAvailability();else if(nav==='resumo')renderSummary();else renderCalendar();
 }
-async function syncRemote(){
- if(!isShared){currentStatus='Dados neste navegador';refreshStatus();return;}
- if(dirty)return;
- try{currentStatus='Sincronizando...';refreshStatus();const loaded=await fetchShared();state=loaded;calculate();statusError=false;currentStatus='Dados compartilhados';render();}
- catch(e){statusError=true;currentStatus='Sem sincronização';refreshStatus();notify(`Acesso ao banco não disponível: ${e.message}`,true);}
+/** Reabre a fonte dos dados; não somente recalcula o estado já carregado em memória. */
+async function reloadData(userInitiated=false){
+ if(dirty){if(userInitiated)notify('Salve ou descarte as alterações antes de atualizar os dados.',true);return false;}
+ if(!isShared){
+  state=getLocal();calculate();statusError=false;
+  currentStatus='Dados neste navegador · atualizados';render();
+  if(userInitiated)notify('Dados relidos do navegador e escala atualizada.');
+  return true;
+ }
+ if(syncInProgress){if(userInitiated)notify('Sincronização já em andamento.');return false;}
+ syncInProgress=true;lastSyncAttempt=Date.now();
+ try{
+  currentStatus='Buscando dados...';refreshStatus();
+  const loaded=await fetchShared(); // sync.js utiliza cache: no-store para o banco.
+  if(dirty)return false; // Nunca substitui edições que começaram durante a requisição.
+  state=loaded;calculate();statusError=false;
+  currentStatus='Dados compartilhados · atualizados';render();
+  if(userInitiated)notify('Dados mais recentes recebidos e escala atualizada.');
+  return true;
+ }catch(e){
+  statusError=true;currentStatus='Sem sincronização · dados locais';refreshStatus();
+  notify(`Falha ao buscar dados compartilhados: ${e.message}`,true);return false;
+ }finally{syncInProgress=false;}
 }
+/** Botão Atualizar: atualiza as escolhas e verifica se há código novo publicado. */
+async function refreshAll(){
+ if(dirty){notify('Salve ou descarte as alterações antes de atualizar.',true);return;}
+ await reloadData(true);
+ if('serviceWorker' in navigator){
+  try{
+   const registration=await navigator.serviceWorker.getRegistration();
+   if(registration){await registration.update();if(registration.waiting)registration.waiting.postMessage({type:'SKIP_WAITING'});}
+  }catch(error){console.warn('Não foi possível verificar atualização do PWA:',error);}
+ }
+}
+
 async function changeRotation(day){
  if(!Number.isInteger(day)||day<0||day>4)return;
  state.rotationDay=day;calculate();render();notify('Escala recalculada para rodízio na '+WEEKDAYS[day].toLowerCase()+'-feira.');
@@ -149,7 +181,7 @@ root.addEventListener('click',e=>{
   case 'download-annual':downloadPDF(schedule,state,{mode:'year'});notify('PDF anual solicitado.');break;
   case 'edit-availability':nav='disponibilidade';render();break;
   case 'go-schedule':nav='escala';render();break;
-  case 'refresh':isShared?syncRemote():(calculate(),render(),notify('Escala recalculada.'));break;
+  case 'refresh':refreshAll();break;
   case 'save-person':savePerson();break;
   case 'select-all-days':{const p=getDraft();p.days=[0,1,2,3,4];draft=p;dirty=true;renderAvailability();break;}
   case 'clear-all-days':{const p=getDraft();p.days=[];draft=p;dirty=true;renderAvailability();break;}
@@ -174,7 +206,36 @@ document.getElementById('main-nav').addEventListener('click',e=>{
 });
 document.getElementById('mobile-menu').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
 render();
-if(isShared){syncRemote();window.setInterval(()=>{if(!dirty && !document.hidden)syncRemote();},60000);}
-if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost'))navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('SW:',err));
+// Na abertura da página e em cada retorno ao app, recarrega dados na fonte correspondente.
+reloadData();
+window.setInterval(()=>{if(isShared && !dirty && !document.hidden)reloadData();},60000);
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden && Date.now()-lastSyncAttempt>12000)reloadData();
+});
+window.addEventListener('focus',()=>{
+ if(isShared && Date.now()-lastSyncAttempt>12000)reloadData();
+});
+// Mudanças em outra aba do mesmo navegador são refletidas na tela sem recarregamento forçado.
+window.addEventListener('storage',event=>{
+ if(!isShared && event.key===LOCAL_STORE_KEY && !dirty)reloadData();
+});
+
+if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
+ const wasControlled=Boolean(navigator.serviceWorker.controller);
+ let reloadingForUpdate=false;
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{
+  // Nova versão ativada: carrega HTML/JS novos automaticamente (exceto durante edição não salva).
+  if(!wasControlled || reloadingForUpdate || !navigator.serviceWorker.controller)return;
+  if(dirty){notify('Nova versão disponível. Salve as alterações e recarregue a página.',true);return;}
+  reloadingForUpdate=true;
+  window.location.reload();
+ });
+ navigator.serviceWorker.register('./sw.js?v=0.3.0',{updateViaCache:'none'})
+  .then(registration=>{
+   if(registration.waiting)registration.waiting.postMessage({type:'SKIP_WAITING'});
+   // Verifica novas versões ao abrir, sem exigir Ctrl+Shift+R.
+   registration.update().catch(error=>console.warn('Atualização do PWA:',error));
+  }).catch(error=>console.warn('Registro SW:',error));
+}
 // Inspeção automatizada local (não é necessária para usuários do PWA).
-window.__escalaBeta={getState:()=>structuredClone(state),getResult:()=>schedule,validate:()=>validateSchedule(schedule,state)};
+window.__escalaBeta={getState:()=>structuredClone(state),getResult:()=>schedule,validate:()=>validateSchedule(schedule,state),reloadData};
