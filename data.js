@@ -51,12 +51,10 @@ export function allDates(){
  return dates;
 }
 export const DATES_2026=allDates();
-export function defaultState(){return {schema:2,year:YEAR,rotationDay:1,people:PEOPLE.map(p=>({...p,days:[...p.days],exceptions:{}})),savedAt:null};}
+export function defaultState(){return {schema:3,year:YEAR,people:PEOPLE.map(p=>({...p,days:[...p.days],exceptions:{}})),savedAt:null};}
 export function sanitizeState(raw){
  const out=defaultState();
  if(!raw || typeof raw!=='object')return out;
- const rd=Number(raw.rotationDay);
- if(Number.isInteger(rd)&&rd>=0&&rd<=4)out.rotationDay=rd;
  if(!Array.isArray(raw.people))return out;
  for(const person of out.people){
   const other=raw.people.find(p=>p?.id===person.id);

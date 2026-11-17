@@ -1,4 +1,4 @@
-import {defaultState,sanitizeState} from './data.js?v=0.3.0';
+import {defaultState,sanitizeState} from './data.js?v=0.4.0';
 export const LOCAL_STORE_KEY='utfpr.escala.2026.beta.v1';
 const cfg=window.PWA_CONFIG||{};
 const url=(cfg.supabaseUrl||'').trim().replace(/\/$/,'');
@@ -17,13 +17,9 @@ async function query(resource,options={}){
  return response.json();
 }
 export async function fetchShared(){
- const [people,configs]=await Promise.all([
-  query('escala_pessoas_2026?select=id,days,exceptions'),
-  query('escala_config_2026?select=id,rotation_day&id=eq.1')
- ]);
+ const people=await query('escala_pessoas_2026?select=id,days,exceptions');
  const out=defaultState();
  for(const p of out.people){const row=people.find(r=>r.id===p.id);if(row){p.days=row.days;p.exceptions=row.exceptions;}}
- if(configs.length)out.rotationDay=configs[0].rotation_day;
  out.savedAt=new Date().toISOString();
  return sanitizeState(out);
 }
@@ -31,12 +27,6 @@ export async function saveSharedPerson(p){
  return query('escala_pessoas_2026?on_conflict=id',{
   method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},
   body:JSON.stringify([{id:p.id,days:p.days,exceptions:p.exceptions}])
- });
-}
-export async function saveSharedRotation(day){
- return query('escala_config_2026?on_conflict=id',{
-  method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},
-  body:JSON.stringify([{id:1,rotation_day:day}])
  });
 }
 export function downloadJSON(state){

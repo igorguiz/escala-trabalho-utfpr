@@ -1,7 +1,7 @@
-import {YEAR,WEEKDAYS,MONTHS,PEOPLE,CALENDAR,DATES_2026,defaultState,sanitizeState,formatShortDate,getStatus} from './data.js?v=0.3.0';
-import {generateSchedule,validateSchedule} from './scheduler.js?v=0.3.0';
-import {downloadPDF} from './pdf.js?v=0.3.0';
-import {isShared,LOCAL_STORE_KEY,getLocal,saveLocal,fetchShared,saveSharedPerson,saveSharedRotation,downloadJSON} from './sync.js?v=0.3.0';
+import {YEAR,WEEKDAYS,MONTHS,PEOPLE,CALENDAR,DATES_2026,defaultState,sanitizeState,formatShortDate,getStatus} from './data.js?v=0.4.0';
+import {generateSchedule,validateSchedule} from './scheduler.js?v=0.4.0';
+import {downloadPDF} from './pdf.js?v=0.4.0';
+import {isShared,LOCAL_STORE_KEY,getLocal,saveLocal,fetchShared,saveSharedPerson,downloadJSON} from './sync.js?v=0.4.0';
 
 const root=document.getElementById('view-root');
 const toastEl=document.getElementById('toast');
@@ -35,13 +35,15 @@ function monthOptions(){return MONTHS.map((name,i)=>`<option value="${i}"${displ
 function weekOptions(){return weekStarts.map(start=>`<option value="${start}"${display.week===start?' selected':''}>Semana de ${formatShortDate(start)}</option>`).join('');}
 function personById(id){return state.people.find(p=>p.id===id);}
 function displayPerson(p){return p?`<span class="person">${esc(p.name)}</span><span class="dept-tag ${p.dept}">${p.dept}</span>`:'<span class="muted">—</span>';}
-function badges(){return `<div class="legend"><span><i class="regular"></i>Expediente</span><span><i class="rot"></i>Rodízio</span><span><i class="break"></i>Feriado / recesso</span><span><i class="miss"></i>Pendência</span></div>`;}
+function badges(){return `<div class="legend"><span><i class="regular"></i>2 servidores</span><span><i class="solo"></i>1 servidor</span><span><i class="break"></i>Feriado / recesso</span><span><i class="miss"></i>Sem servidor</span></div>`;}
 function labelDay(d){return WEEKDAYS[d.day]||'';}
 function renderRows(days){
  return `<div class="table-wrap"><table class="schedule-table"><thead><tr><th>Data</th><th>Dia</th><th>Servidor 1</th><th>Servidor 2</th><th>Situação</th></tr></thead><tbody>${days.map(d=>{
- const row=schedule.byDate[d.iso];const blocked=d.status.type!=='util';const rotation=!blocked && d.day===state.rotationDay;
- let stat=blocked?`<span class="chip chip-gray">${esc(d.status.type==='especial'?'Horário especial':d.status.type==='fimdesemana'?'Fim de semana':d.status.label)}</span>`:row?.issue?'<span class="chip chip-red">Pendência</span>':rotation?'<span class="chip chip-yellow">↻ Rodízio</span>':'<span class="chip">Regular</span>';
- return `<tr class="${blocked?'blocked':row?.issue?'issue':rotation?'rotation':''}"><td><div class="date-primary">${formatShortDate(d.iso)}</div></td><td>${labelDay(d)}</td><td>${blocked?'—':displayPerson(row?.people[0])}</td><td>${blocked?'—':displayPerson(row?.people[1])}</td><td>${stat}</td></tr>`;
+ const row=schedule.byDate[d.iso];const blocked=d.status.type!=='util';
+ const n=row?.people.length||0;
+ let stat=blocked?`<span class="chip chip-gray">${esc(d.status.type==='especial'?'Horário especial':d.status.type==='fimdesemana'?'Fim de semana':d.status.label)}</span>`:n===0?'<span class="chip chip-red">Sem servidor</span>':n===1?'<span class="chip chip-yellow">1 servidor</span>':'<span class="chip">2 servidores</span>';
+ const note=!blocked&&row?.note?` <span class="hint" title="${esc(row.note)}">*</span>`:'';
+ return `<tr class="${blocked?'blocked':n===0?'issue':n===1?'solo':''}"><td><div class="date-primary">${formatShortDate(d.iso)}</div></td><td>${labelDay(d)}</td><td>${blocked?'—':displayPerson(row?.people[0])}</td><td>${blocked?'—':displayPerson(row?.people[1])}</td><td>${stat}${note}</td></tr>`;
  }).join('')}</tbody></table></div>`;
 }
 function dayCalendarRows(){
@@ -58,22 +60,22 @@ function renderSchedule(){
  const warnings=schedule.warnings;
  const weekLabel=display.mode==='month'?`${MONTHS[display.month]} de 2026`:display.mode==='week'?`Semana de ${formatShortDate(display.week)}`:display.mode==='day'?`Consulta do dia ${formatShortDate(display.date)}`:'Ano de 2026';
  const cards=[
-  ['Dias úteis',''+schedule.regularDays,'Conforme calendário administrativo','▦'],
-  ['Postos preenchidos',`${schedule.filled} / ${schedule.slots}`,'Dois servidores por dia','◉'],
-  ['Dia do rodízio',WEEKDAYS[state.rotationDay],'Dia configurável','↻'],
-  ['Pendências',String(schedule.slots-schedule.filled),'Vagas sem cobertura','!']
+  ['Dias com 2 pessoas',String(schedule.daysWithTwo),'Dois departamentos distintos','◉'],
+  ['Dias com 1 pessoa',String(schedule.daysWithOne),'Comparecimento individual','◯'],
+  ['Dias sem servidor',String(schedule.daysWithNone),'Nenhuma pessoa disponível','!'],
+  ['Comparecimentos',String(schedule.filled),`${schedule.regularDays} dias úteis em 2026`,'▦']
  ];
  root.innerHTML=`
- <section class="hero"><div><div class="eyebrow">PLANEJAMENTO ANUAL · 2026</div><h1>Escala de trabalho</h1><p>Distribuição inteligente de servidores com respeito às disponibilidades, aos departamentos e ao calendário administrativo.</p></div><div class="hero-btns"><button class="btn" data-action="refresh">${icon('refresh')} Atualizar</button><button class="btn btn-primary" data-action="download-pdf">${icon('download')} Baixar PDF</button></div></section>
- <section class="stats-grid">${cards.map(([label,value,sub,sym])=>`<div class="stat-card"><div class="label">${label}<span class="icon-slab">${sym}</span></div><div class="value">${esc(value)}</div><div class="sub">${sub}</div></div>`).join('')}</section>
- <section class="card"><div class="card-heading"><div><h2>Configuração da escala</h2><p>Altere o dia do rodízio; a escala será recalculada automaticamente.</p></div><span class="chip chip-yellow">Personalizável</span></div><div class="config-grid"><div class="form-field"><label for="rotation-day">Dia do rodízio</label><select class="input" id="rotation-day">${WEEKDAYS.map((x,i)=>`<option value="${i}"${state.rotationDay===i?' selected':''}>${x}-feira</option>`).join('')}</select></div><div class="form-field"><label>Ano da escala</label><input class="input" disabled value="2026" /></div><div class="form-field"><label>Critério diário</label><input class="input" disabled value="2 servidores / dia" /></div><button class="btn" data-action="edit-availability">${icon('settings')} Disponibilidades</button></div><div class="hint-box"><strong>Regras da escala:</strong> todos os cinco dias úteis estão disponíveis para escolha de qualquer servidor. O rodízio é configurável e considera os servidores que selecionaram esse dia. As demais regras continuam: dois servidores por dia, departamentos diferentes e respeito ao calendário administrativo. As escolhas individuais podem ser alteradas em <strong>Disponibilidades</strong>.</div></section>
- <section class="card"><div class="card-heading"><div><h2>Visualização da escala</h2><p>Consulte o detalhamento diretamente nesta página ou exporte a seleção atual.</p></div><span class="chip">${schedule.filled===schedule.slots?'Todos os postos preenchidos':schedule.slots-schedule.filled+' vagas a conferir'}</span></div>
+ <section class="hero"><div><div class="eyebrow">PLANEJAMENTO ANUAL · 2026</div><h1>Escala de trabalho</h1><p>Até duas pessoas por dia, exclusivamente conforme as disponibilidades, os departamentos e o calendário administrativo.</p></div><div class="hero-btns"><button class="btn" data-action="refresh">${icon('refresh')} Atualizar</button><button class="btn btn-primary" data-action="download-pdf">${icon('download')} Baixar PDF</button></div></section>
+ <section class="stats-grid">${cards.map(([label,value,sub,sym])=>`<div class="stat-card"><div class="label">${label}<span class="icon-slab">${sym}</span></div><div class="value">${esc(value)}</div><div class="sub">${esc(sub)}</div></div>`).join('')}</section>
+ <section class="card"><div class="card-heading"><div><h2>Critérios da escala</h2><p>A distribuição é calculada de acordo com as preferências registradas.</p></div><span class="chip chip-yellow">Sem rodízio</span></div><div class="config-grid"><div class="form-field"><label>Ano da escala</label><input class="input" disabled value="2026" /></div><div class="form-field"><label>Quantidade por dia</label><input class="input" disabled value="De 0 a 2 servidores" /></div><button class="btn" data-action="edit-availability">${icon('settings')} Editar disponibilidades</button></div><div class="hint-box"><strong>Regras:</strong> se houver dois ou mais servidores disponíveis de departamentos diferentes, serão escolhidos dois, priorizando equilíbrio dos comparecimentos. Se apenas um puder, ele trabalhará sozinho. Se todos os disponíveis pertencerem ao mesmo departamento, apenas um será escalado. Se ninguém puder, o dia ficará sinalizado sem servidor. Não há rodízio nem obrigação de preencher uma segunda posição.</div></section>
+ <section class="card"><div class="card-heading"><div><h2>Visualização da escala</h2><p>Consulte na página ou exporte a seleção em PDF.</p></div><span class="chip">${schedule.daysWithNone===0?'Todos os dias possuem cobertura':schedule.daysWithNone+' dia(s) sem cobertura'}</span></div>
  <div class="filters"><div class="segmented" role="group" aria-label="Modo de visualização">${[['day','Diária'],['week','Semanal'],['month','Mensal'],['year','Anual']].map(([id,lab])=>`<button data-view="${id}" class="${display.mode===id?'active':''}" aria-pressed="${display.mode===id}">${lab}</button>`).join('')}</div><div class="form-field">${display.mode==='month'?`<label for="select-month">Mês</label><select id="select-month" class="input">${monthOptions()}</select>`:display.mode==='week'?`<label for="select-week">Semana</label><select id="select-week" class="input">${weekOptions()}</select>`:display.mode==='day'?`<label for="select-day">Data</label><input id="select-day" type="date" class="input" min="2026-01-01" max="2026-12-31" value="${display.date}"/>`:'<span class="hint">12 meses · 2026</span>'}</div></div>
  ${badges()}
- <div class="table-header"><div><h2>${weekLabel}</h2><p>Escala por dia, com departamentos e marcação de rodízio.</p></div><button class="btn btn-sm" data-action="download-pdf">${icon('download')} PDF desta visualização</button></div>
+ <div class="table-header"><div><h2>${weekLabel}</h2><p>Escala diária com um ou dois servidores conforme disponibilidade.</p></div><button class="btn btn-sm" data-action="download-pdf">${icon('download')} PDF desta visualização</button></div>
  ${display.mode==='year'?MONTHS.map((m,i)=>{const days=DATES_2026.filter(d=>d.month===i && d.day<5);return `<details class="year-month" ${i===10?'open':''}><summary>${m} <span class="count-label">${days.filter(d=>d.status.type==='util').length} dias úteis</span></summary>${renderRows(days)}</details>`;}).join(''):renderRows(dayCalendarRows())}
- <p class="subfoot">As linhas em amarelo correspondem ao dia de rodízio escolhido. Dias sem expediente permanecem visíveis, mas não recebem servidores. O PDF é gerado com os mesmos dados exibidos.</p></section>
- ${warnings.length?`<section class="card"><div class="card-heading"><h2>Avisos da distribuição (${warnings.length})</h2></div><ul class="alert-list">${warnings.slice(0,20).map(w=>`<li>${esc(w)}</li>`).join('')}${warnings.length>20?`<li>E mais ${warnings.length-20} aviso(s).</li>`:''}</ul></section>`:''}
+ <p class="subfoot">Linhas amarelas indicam um servidor; linhas vermelhas indicam ausência de candidatos. O asterisco (*) indica que os disponíveis são do mesmo departamento. Dias sem expediente não recebem servidores. O PDF utiliza exatamente a mesma distribuição.</p></section>
+ ${warnings.length?`<section class="card"><div class="card-heading"><h2>Dias sem servidor (${warnings.length})</h2></div><ul class="alert-list">${warnings.slice(0,20).map(w=>`<li>${esc(w)}</li>`).join('')}${warnings.length>20?`<li>E mais ${warnings.length-20} data(s).</li>`:''}</ul></section>`:''}
  `;
 }
 function dayShort(days){return days.length?days.map(d=>WEEKDAYS[d].slice(0,3)).join(' · '):'Nenhum dia definido';}
@@ -86,15 +88,15 @@ function renderAvailability(){
  <h2 class="section-title">Selecione um servidor</h2><div class="people-grid">${state.people.map(person=>`<button type="button" data-person="${person.id}" class="person-card ${personId===person.id?'active':''}"><span class="person-avatar">${person.name.slice(0,2).toUpperCase()}</span><span><strong>${esc(person.name)}</strong><small>${person.dept}</small></span><span class="dayline">${dayShort(person.days)}</span></button>`).join('')}</div>
  <div class="two-col"><section class="card"><div class="card-heading"><div><h2>${esc(p.name)} · ${p.dept}</h2><p>Selecione os dias em que deseja trabalhar</p></div></div><div class="weekday-options">${WEEKDAYS.map((name,i)=>{
  return `<label class="weekday-check"><input type="checkbox" data-weekday="${i}" ${p.days.includes(i)?'checked':''}/><span>${name.slice(0,3)}</span><i class="checkbox-art"></i></label>`;
- }).join('')}</div><div class="weekday-actions"><button type="button" class="btn btn-sm" data-action="select-all-days">Marcar todos</button><button type="button" class="btn btn-sm" data-action="clear-all-days">Desmarcar todos</button></div><div class="divider"></div><p class="intro-note">Os cinco dias úteis podem ser marcados para qualquer servidor, inclusive no dia de rodízio (${WEEKDAYS[state.rotationDay]}). O sistema só escala nos dias selecionados, salvo quando for cadastrada uma exceção de disponibilidade para a data específica. Feriados e recessos permanecem sem escala.</p><div class="divider"></div><button class="btn btn-primary" data-action="save-person">${icon('save')} Salvar disponibilidade</button><span style="margin-left:12px;font-size:11px;color:#9a7d24">${dirty?'Alterações não salvas':''}</span></section>
+ }).join('')}</div><div class="weekday-actions"><button type="button" class="btn btn-sm" data-action="select-all-days">Marcar todos</button><button type="button" class="btn btn-sm" data-action="clear-all-days">Desmarcar todos</button></div><div class="divider"></div><p class="intro-note">Os cinco dias úteis podem ser marcados por qualquer servidor. Em cada data, o sistema escolhe até duas pessoas de departamentos diferentes; se somente uma puder, ela fica sozinha. As exceções por data prevalecem sobre a seleção semanal. Feriados e recessos permanecem sem escala.</p><div class="divider"></div><button class="btn btn-primary" data-action="save-person">${icon('save')} Salvar disponibilidade</button><span style="margin-left:12px;font-size:11px;color:#9a7d24">${dirty?'Alterações não salvas':''}</span></section>
  <section class="card"><div class="card-heading"><div><h2>Exceções por data</h2><p>Para férias, impedimentos ou disponibilidades pontuais.</p></div></div><div class="date-form"><div class="form-field"><label for="exception-date">Data em 2026</label><input class="input" type="date" id="exception-date" min="2026-01-01" max="2026-12-31" value="2026-11-12"/></div><div class="form-field"><label for="exception-type">Condição</label><select class="input" id="exception-type"><option value="off">Não posso trabalhar</option><option value="on">Estou disponível</option></select></div><button class="btn" data-action="add-exception">+ Adicionar</button></div><div class="exceptions">${Object.entries(p.exceptions).sort(([a],[b])=>a.localeCompare(b)).map(([date,v])=>`<span class="exception-tag ${v}">${formatShortDate(date)} · ${v==='off'?'Indisponível':'Disponível'}<button type="button" aria-label="Remover exceção ${date}" data-remove-exception="${date}">×</button></span>`).join('')||'<p class="hint">Nenhuma exceção cadastrada.</p>'}</div><div class="divider"></div><p class="hint">Adicionar uma exceção não salva automaticamente. Clique em <strong>Salvar disponibilidade</strong> para aplicá-la à escala. Datas de feriado ou recesso não são abertas por exceções.</p></section></div>`;
 }
 function renderSummary(){
  const max=Math.max(1,...Object.values(schedule.total));
- root.innerHTML=`<section class="hero"><div><div class="eyebrow">DISTRIBUIÇÃO ANUAL</div><h1>Resumo de comparecimentos</h1><p>Avalie a distribuição total e as participações no rodízio ao longo de 2026.</p></div><div class="hero-btns"><button class="btn btn-primary" data-action="download-annual">${icon('download')} PDF anual</button></div></section>
- <section class="stats-grid"><div class="stat-card"><div class="label">Servidores</div><div class="value">${state.people.length}</div><div class="sub">3 departamentos</div></div><div class="stat-card"><div class="label">Dias regulares</div><div class="value">${schedule.regularDays}</div><div class="sub">Conforme o calendário</div></div><div class="stat-card"><div class="label">Comparecimentos</div><div class="value">${schedule.filled}</div><div class="sub">Somatório de todos os servidores</div></div><div class="stat-card"><div class="label">Vagas pendentes</div><div class="value">${schedule.slots-schedule.filled}</div><div class="sub">Sem cobertura</div></div></section>
- <section class="card"><div class="card-heading"><div><h2>Total de comparecimentos por servidor</h2><p>O equilíbrio depende das disponibilidades individuais e do dia de rodízio selecionado.</p></div></div>${state.people.map(p=>`<div class="bar-row"><span class="name">${esc(p.name)}</span><span class="hint">${p.dept}</span><div class="bar-bg"><div class="bar-fill" style="width:${Math.max(0,(schedule.total[p.id]/max)*100).toFixed(1)}%"></div></div><span class="bar-number"><b>${schedule.total[p.id]}</b> dias</span></div>`).join('')}</section>
- <section class="card"><div class="card-heading"><div><h2>Participações no rodízio · ${WEEKDAYS[state.rotationDay]}</h2><p>Todos os servidores podem participar quando selecionarem o dia de rodízio.</p></div></div><div class="table-wrap"><table class="schedule-table"><thead><tr><th>Servidor</th><th>Departamento</th><th>Total anual</th><th>Rodízios</th></tr></thead><tbody>${state.people.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${p.dept}</td><td>${schedule.total[p.id]}</td><td><b>${schedule.rotationTotal[p.id]}</b></td></tr>`).join('')}</tbody></table></div></section>${schedule.warnings.length?`<section class="info-ribbon red"><b>${schedule.warnings.length} aviso(s) de distribuição.</b> Consulte a escala para identificar semanas nas quais nem todos puderam comparecer.</section>`:'<section class="info-ribbon">Nenhum conflito detectado com a configuração atual.</section>'}`;
+ root.innerHTML=`<section class="hero"><div><div class="eyebrow">DISTRIBUIÇÃO ANUAL</div><h1>Resumo de comparecimentos</h1><p>Comparecimentos distribuídos conforme as disponibilidades e os departamentos, sem rodízio.</p></div><div class="hero-btns"><button class="btn btn-primary" data-action="download-annual">${icon('download')} PDF anual</button></div></section>
+ <section class="stats-grid"><div class="stat-card"><div class="label">Servidores</div><div class="value">${state.people.length}</div><div class="sub">3 departamentos</div></div><div class="stat-card"><div class="label">Dias com 2</div><div class="value">${schedule.daysWithTwo}</div><div class="sub">Dois servidores</div></div><div class="stat-card"><div class="label">Dias com 1</div><div class="value">${schedule.daysWithOne}</div><div class="sub">Um servidor</div></div><div class="stat-card"><div class="label">Sem servidor</div><div class="value">${schedule.daysWithNone}</div><div class="sub">Nenhum disponível</div></div></section>
+ <section class="card"><div class="card-heading"><div><h2>Total anual por servidor</h2><p>Os totais dependem das disponibilidades informadas.</p></div></div>${state.people.map(p=>`<div class="bar-row"><span class="name">${esc(p.name)}</span><span class="hint">${p.dept}</span><div class="bar-bg"><div class="bar-fill" style="width:${Math.max(0,(schedule.total[p.id]/max)*100).toFixed(1)}%"></div></div><span class="bar-number"><b>${schedule.total[p.id]}</b> dias</span></div>`).join('')}</section>
+ <section class="card"><div class="card-heading"><div><h2>Conferência de comparecimentos</h2><p>Total de ${schedule.filled} comparecimentos nos ${schedule.regularDays} dias de expediente regular.</p></div></div><div class="table-wrap"><table class="schedule-table"><thead><tr><th>Servidor</th><th>Departamento</th><th>Total anual</th><th>Dias semanais marcados</th></tr></thead><tbody>${state.people.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${p.dept}</td><td>${schedule.total[p.id]}</td><td>${esc(dayShort(p.days))}</td></tr>`).join('')}</tbody></table></div></section>${schedule.warnings.length?`<section class="info-ribbon red"><b>${schedule.warnings.length} dia(s) sem servidor.</b> Consulte a escala para identificar as datas.</section>`:'<section class="info-ribbon">Todos os dias úteis possuem ao menos um servidor disponível e escalado.</section>'}`;
 }
 function renderCalendar(){
  const types={feriado:'Feriado',recesso:'Recesso administrativo',local:'Feriado/recesso local',especial:'Horário especial'};
@@ -140,11 +142,6 @@ async function refreshAll(){
  }
 }
 
-async function changeRotation(day){
- if(!Number.isInteger(day)||day<0||day>4)return;
- state.rotationDay=day;calculate();render();notify('Escala recalculada para rodízio na '+WEEKDAYS[day].toLowerCase()+'-feira.');
- if(isShared)try{await saveSharedRotation(day);currentStatus='Dados compartilhados';statusError=false;refreshStatus();}catch(e){notify('Alteração aplicada localmente; não foi salva no banco: '+e.message,true);statusError=true;currentStatus='Sem sincronização';refreshStatus();}
-}
 async function savePerson(){
  if(!draft){notify('Nenhuma alteração pendente.');return;}
  state.people=state.people.map(p=>p.id===draft.id?structuredClone(draft):p);calculate();dirty=false;draft=null;render();notify('Disponibilidade de '+personById(personId).name+' salva. Escala recalculada.');
@@ -192,7 +189,6 @@ root.addEventListener('click',e=>{
 });
 root.addEventListener('change',e=>{
  const el=e.target;
- if(el.id==='rotation-day'){changeRotation(Number(el.value));return;}
  if(el.id==='select-month'){display.month=Number(el.value);renderSchedule();return;}
  if(el.id==='select-week'){display.week=el.value;renderSchedule();return;}
  if(el.id==='select-day'){if(DATES_2026.some(d=>d.iso===el.value)){display.date=el.value;renderSchedule();}else notify('Selecione uma data de 2026.',true);return;}
@@ -230,7 +226,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostn
   reloadingForUpdate=true;
   window.location.reload();
  });
- navigator.serviceWorker.register('./sw.js?v=0.3.0',{updateViaCache:'none'})
+ navigator.serviceWorker.register('./sw.js?v=0.4.0',{updateViaCache:'none'})
   .then(registration=>{
    if(registration.waiting)registration.waiting.postMessage({type:'SKIP_WAITING'});
    // Verifica novas versões ao abrir, sem exigir Ctrl+Shift+R.

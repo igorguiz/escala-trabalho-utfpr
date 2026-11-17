@@ -1,116 +1,113 @@
-import {DATES_2026,weekdayIndex,formatShortDate} from './data.js?v=0.3.0';
+/* Escala UTFPR — sem rodízio. Cada dia recebe 0, 1 ou 2 pessoas conforme disponibilidades.
+   Havendo ao menos uma dupla de departamentos distintos, o dia recebe duas pessoas.
+   Pessoas disponíveis do mesmo departamento nunca formam dupla. */
+import {DATES_2026,weekdayIndex,formatShortDate} from './data.js?v=0.4.0';
 
-function mondayISO(iso){const dt=new Date(`${iso}T12:00:00Z`);dt.setUTCDate(dt.getUTCDate()-weekdayIndex(iso));return dt.toISOString().slice(0,10);}
-function allowed(person,day,state){
+function mondayISO(iso){
+ const dt=new Date(`${iso}T12:00:00Z`);
+ dt.setUTCDate(dt.getUTCDate()-weekdayIndex(iso));
+ return dt.toISOString().slice(0,10);
+}
+export function available(person,day){
  if(day.status.type!=='util')return false;
- // Preferência individual prevalece: ninguém é escalado em dia não selecionado.
- // Uma exceção pontual "disponível" pode habilitar a data; "indisponível" a bloqueia.
  const specific=person.exceptions?.[day.iso];
  if(specific==='off')return false;
  if(specific==='on')return true;
  return person.days.includes(day.day);
 }
-function candidates(day,state){
- const arr=state.people.map((p,i)=>({p,i})).filter(({p})=>allowed(p,day,state));
+function choicesFor(day,state){
+ const eligible=state.people.map((p,i)=>({p,i})).filter(({p})=>available(p,day));
  const pairs=[];
- for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){
-  if(arr[i].p.dept!==arr[j].p.dept)pairs.push([arr[i].i,arr[j].i]);
+ for(let i=0;i<eligible.length;i++)for(let j=i+1;j<eligible.length;j++){
+  if(eligible[i].p.dept!==eligible[j].p.dept)pairs.push([eligible[i].i,eligible[j].i]);
  }
- if(pairs.length)return pairs;
- if(arr.length)return arr.map(v=>[v.i,-1]);
- return [[-1,-1]];
+ // Quando uma dupla é possível, NÃO há opção de deixar um posto vazio.
+ // Se nenhum par for válido, escolha um único servidor (ou nenhum, se não houver candidatos).
+ return {eligibleCount:eligible.length,choices:pairs.length?pairs:eligible.length?eligible.map(({i})=>[i]):[[]],sameDeptOnly:eligible.length>1&&!pairs.length};
 }
-function solveWeek(week,state,countsTotal,rotationTotals,pairTotals,maxPerWeek){
- let states=new Map([['0,0,0,0,0,0,0,0',{counts:[0,0,0,0,0,0,0,0],score:0,picks:[]}]]);
-
- for(let di=0;di<week.length;di++){
-  const day=week[di], choices=candidates(day,state), next=new Map();
-  for(const old of states.values())for(const pair of choices){
-   if(pair.some(i=>i!==-1 && old.counts[i]>=maxPerWeek))continue;
-   const nowCounts=old.counts.slice();
-   let newScore=old.score;
-   for(const i of pair){
-    if(i===-1){newScore-=5000;continue;}
-    const before=nowCounts[i];
-    nowCounts[i]++;
-    newScore+=before===0?1250:before===1?-55:-550;
-    // Distribuição anual: menor carga acumulada é favorecida.
-    const prior=countsTotal[state.people[i].id]||0;
-    newScore-=90.0*(prior+before);
-    if(day.day===state.rotationDay){
-      newScore-=160*(rotationTotals[state.people[i].id]||0);
-    }
-
+function solveWeek(days,state,totals,pairTotals,cap){
+ const n=state.people.length;
+ let states=new Map([['0'.repeat(n),{counts:Array(n).fill(0),score:0,picks:[]}]]);
+ for(const day of days){
+  const next=new Map();
+  const options=choicesFor(day,state).choices;
+  for(const old of states.values())for(const picks of options){
+   if(picks.some(i=>old.counts[i]>=cap))continue;
+   const counts=old.counts.slice();let score=old.score;
+   for(const i of picks){
+    const priorWeek=counts[i];counts[i]++;
+    // Distribuição entre os elegíveis, sem prejudicar preenchimento diário.
+    score+=priorWeek===0?1250:priorWeek===1?-50:-500;
+    score-=90*((totals[state.people[i].id]||0)+priorWeek);
    }
-
-   if(pair[0]!==-1 && pair[1]!==-1){
-     const key=[state.people[pair[0]].id,state.people[pair[1]].id].sort().join('|');
-     newScore-=1.5*(pairTotals[key]||0);
+   if(picks.length===2){
+    const k=picks.map(i=>state.people[i].id).sort().join('|');
+    score-=2*(pairTotals[k]||0);
    }
-   const key=nowCounts.join(',');
-   const saved=next.get(key);
-   if(!saved || newScore>saved.score){next.set(key,{counts:nowCounts,score:newScore,picks:[...old.picks,pair]});}
+   const key=counts.join(',');
+   const prev=next.get(key);
+   if(!prev||score>prev.score)next.set(key,{counts,score,picks:[...old.picks,picks]});
   }
   states=next;
   if(!states.size)return null;
  }
  let best=null;
- for(const item of states.values()){
-
-  const unique=item.counts.filter(x=>x>0).length;
-  const score=item.score+unique*100000;
-  if(!best||score>best.finalScore)best={...item,finalScore:score,unique};
+ for(const candidate of states.values()){
+  const unique=candidate.counts.filter(x=>x>0).length;
+  const rating=candidate.score+unique*100000;
+  if(!best||rating>best.rating)best={...candidate,rating};
  }
  return best;
 }
-
 export function generateSchedule(state){
  const open=DATES_2026.filter(d=>d.status.type==='util');
- const weeksMap=new Map();
- for(const day of open){const monday=mondayISO(day.iso); if(!weeksMap.has(monday))weeksMap.set(monday,[]); weeksMap.get(monday).push(day);}
+ const grouped=new Map();
+ for(const day of open){const start=mondayISO(day.iso);if(!grouped.has(start))grouped.set(start,[]);grouped.get(start).push(day);}
  const all=[],weeks=[],warnings=[];
  const total=Object.fromEntries(state.people.map(p=>[p.id,0]));
- const rotationTotal=Object.fromEntries(state.people.map(p=>[p.id,0]));
  const pairTotals={};
- for(const [start,days] of weeksMap){
-  let chosen=solveWeek(days,state,total,rotationTotal,pairTotals,2);
-  let usedCap=2;
-  if(!chosen){chosen=solveWeek(days,state,total,rotationTotal,pairTotals,3);usedCap=3;}
-  if(!chosen){chosen=solveWeek(days,state,total,rotationTotal,pairTotals,5);usedCap=5;}
-  const records=[];
-  if(!chosen){
-   for(const day of days){records.push({...day,people:[],issue:'Não foi possível compor a escala'});warnings.push(`${formatShortDate(day.iso)}: não foi possível compor a escala.`);}
-  }else{
-   for(let i=0;i<days.length;i++){
-    const pair=chosen.picks[i];const people=pair.filter(v=>v>=0).map(v=>state.people[v]);
-    const day=days[i];const issue=people.length<2?'Vaga sem cobertura':null;
-    const record={...day,people,issue,rotation:day.day===state.rotationDay};
-    records.push(record);
-    if(issue)warnings.push(`${formatShortDate(day.iso)}: ${issue}.`);
-    for(const person of people){total[person.id]++;if(record.rotation)rotationTotal[person.id]++;}
-    if(people.length===2){const key=people.map(p=>p.id).sort().join('|');pairTotals[key]=(pairTotals[key]||0)+1;}
-   }
-   if(usedCap>2)warnings.push(`Semana de ${formatShortDate(start)}: disponibilidade restrita, com até ${usedCap} comparecimentos de um servidor.`);
-   const eligibleIds=new Set();
-   for(const day of days)for(const p of state.people)if(allowed(p,day,state))eligibleIds.add(p.id);
-   const possibleCount=Math.min(eligibleIds.size,days.length*2);
-   if(chosen.unique<possibleCount){warnings.push(`Semana de ${formatShortDate(start)}: ${chosen.unique} servidores distintos em ${days.length} dias úteis; verifique as disponibilidades.`);}
+ for(const [start,days] of grouped){
+  let solution=null;
+  for(const cap of [1,2,3,4,5]){
+   solution=solveWeek(days,state,total,pairTotals,cap);
+   if(solution)break;
   }
-  weeks.push({start,days:records,counts:Object.fromEntries(state.people.map(p=>[p.id,records.reduce((n,r)=>n+r.people.some(q=>q.id===p.id),0)]))});
+  if(!solution)throw new Error(`Falha interna no planejamento da semana ${start}`);
+  const records=[];
+  for(let di=0;di<days.length;di++){
+   const day=days[di];
+   const choices=choicesFor(day,state);
+   const people=solution.picks[di].map(i=>state.people[i]);
+   const issue=people.length===0?'Nenhum servidor disponível':null;
+   const note=choices.sameDeptOnly?'Disponíveis do mesmo departamento':null;
+   const record={...day,people,issue,note,eligibleCount:choices.eligibleCount};
+   records.push(record);
+   if(issue)warnings.push(`${formatShortDate(day.iso)}: nenhum servidor disponível.`);
+   // A restrição de departamento pode impedir um segundo nome, mas não é erro de escala.
+   for(const person of people)total[person.id]++;
+   if(people.length===2){const k=people.map(p=>p.id).sort().join('|');pairTotals[k]=(pairTotals[k]||0)+1;}
+  }
+  weeks.push({start,days:records,counts:Object.fromEntries(state.people.map(p=>[p.id,records.filter(r=>r.people.some(q=>q.id===p.id)).length]))});
   all.push(...records);
  }
- const byDate=Object.fromEntries(all.map(x=>[x.iso,x]));
- const slots=all.length*2;
- return {year:2026,records:all,weeks,byDate,total,rotationTotal,warnings,regularDays:all.length,slots,filled:all.reduce((n,r)=>n+r.people.length,0)};
+ const byDate=Object.fromEntries(all.map(r=>[r.iso,r]));
+ const daysWithTwo=all.filter(r=>r.people.length===2).length;
+ const daysWithOne=all.filter(r=>r.people.length===1).length;
+ const daysWithNone=all.filter(r=>r.people.length===0).length;
+ return {year:2026,records:all,weeks,byDate,total,warnings,regularDays:all.length,
+  daysWithTwo,daysWithOne,daysWithNone,filled:daysWithTwo*2+daysWithOne};
 }
 export function validateSchedule(result,state){
  const problems=[];
- for(const row of result.records){
-  if(row.people.length!==2)problems.push(`${row.iso}: ${row.people.length} servidor(es)`);
-  if(row.people.length===2 && row.people[0].dept===row.people[1].dept)problems.push(`${row.iso}: departamentos repetidos`);
-  for(const p of row.people){
-   if(!allowed(p,row,state))problems.push(`${row.iso}: ${p.name} sem disponibilidade`);
-  }
+ for(const day of result.records){
+  if(day.people.length>2)problems.push(`${day.iso}: mais de duas pessoas`);
+  if(day.people.length===2&&day.people[0].dept===day.people[1].dept)problems.push(`${day.iso}: departamentos iguais`);
+  if(new Set(day.people.map(p=>p.id)).size!==day.people.length)problems.push(`${day.iso}: servidor repetido`);
+  for(const person of day.people)if(!available(person,day))problems.push(`${day.iso}: ${person.name} sem disponibilidade`);
+  const eligible=state.people.filter(p=>available(p,day));
+  const hasPair=eligible.some((p,i)=>eligible.slice(i+1).some(q=>q.dept!==p.dept));
+  const expected=hasPair?2:eligible.length?1:0;
+  if(day.people.length!==expected)problems.push(`${day.iso}: esperado ${expected} pessoa(s), encontrado ${day.people.length}`);
  }
  return problems;
 }

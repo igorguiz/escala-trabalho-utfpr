@@ -1,5 +1,5 @@
 /* Exportação PDF nativa, sem CDN: formato PDF 1.4, fontes padrão Helvetica. */
-import {DATES_2026,MONTHS,WEEKDAYS,formatShortDate,getStatus} from './data.js?v=0.3.0';
+import {DATES_2026,MONTHS,WEEKDAYS,formatShortDate,getStatus} from './data.js?v=0.4.0';
 
 const PAGE_W=595.28,PAGE_H=841.89;
 const latinMap={'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};
@@ -36,51 +36,53 @@ function dayRows(rows,result){
   const isOpen=d.status.type==='util';
   const first=found?.people[0],second=found?.people[1];
   const rowH=23;
-  if(d.day===result.rotationDay && isOpen)c+=rect(38,y-rowH,519,rowH,'#FFF4D1');
-  else if(!isOpen)c+=rect(38,y-rowH,519,rowH,'#F3F4F6');
+  if(!isOpen)c+=rect(38,y-rowH,519,rowH,'#F3F4F6');
+  else if(found?.people.length===0)c+=rect(38,y-rowH,519,rowH,'#FFE8E8');
+  else if(found?.people.length===1)c+=rect(38,y-rowH,519,rowH,'#FFF4D1');
   else if(idx%2===1)c+=rect(38,y-rowH,519,rowH,'#FAFAFB');
-  const values=[formatShortDate(d.iso).slice(0,5),WEEKDAYS[d.day]||'',first?`${first.name} (${first.dept})`:'-',second?`${second.name} (${second.dept})`:'-',!isOpen?shorten(d.status.label,25):found?.issue?'PENDÊNCIA':d.day===result.rotationDay?'Rodízio':'Regular'];
+  const situation=!isOpen?shorten(d.status.label,25):found?.people.length===0?'SEM SERVIDOR':found?.people.length===1?'1 servidor':'2 servidores';
+  const values=[formatShortDate(d.iso).slice(0,5),WEEKDAYS[d.day]||'',first?`${first.name} (${first.dept})`:'-',second?`${second.name} (${second.dept})`:'-',situation];
   for(let i=0;i<values.length;i++)c+=txt(shorten(values[i],i===2||i===3?24:i===4?24:13),cols[i]+6,y-15.5,7.6,(i===4&&!isOpen),!isOpen?'#7E8792':'#31373E');
   c+=line(38,y-rowH,557,y-rowH);
   y-=rowH;
  }
  return {content:c,y};
 }
-function makeMonth(month,result,rotationDay,pagenum,allPages){
+function makeMonth(month,result,pagenum,allPages){
  const days=DATES_2026.filter(d=>d.month===month && d.day<5);
  const title=MONTHS[month].toUpperCase()+' / 2026';
- const subtitle=`Rodízio: ${WEEKDAYS[rotationDay]} | 2 servidores de setores distintos | Calendário administrativo`;
+ const subtitle='0, 1 ou 2 pessoas por dia | Departamentos diferentes | Calendário administrativo';
  let content=basePage(title,subtitle,pagenum,allPages);
- content+=dayRows(days,{...result,rotationDay}).content;
+ content+=dayRows(days,result).content;
  return content;
 }
-function makeWeek(weekStart,result,rotationDay,page,allPages){
+function makeWeek(weekStart,result,page,allPages){
  const start=new Date(`${weekStart}T12:00:00Z`);
  const dates=[];
  for(let i=0;i<5;i++){const dt=new Date(start);dt.setUTCDate(start.getUTCDate()+i);const iso=dt.toISOString().slice(0,10);const d=DATES_2026.find(x=>x.iso===iso);if(d)dates.push(d);}
- let content=basePage(`SEMANA DE ${formatShortDate(weekStart)}`,`Rodízio: ${WEEKDAYS[rotationDay]} | Semana de referência: segunda a sexta`,page,allPages);
- content+=dayRows(dates,{...result,rotationDay}).content;
+ let content=basePage(`SEMANA DE ${formatShortDate(weekStart)}`,'Sem rodízio | Uma ou duas pessoas conforme disponibilidade',page,allPages);
+ content+=dayRows(dates,result).content;
  return content;
 }
-function makeDay(date,result,rotationDay,page,allPages){
+function makeDay(date,result,page,allPages){
  const d=DATES_2026.find(x=>x.iso===date);
- let c=basePage(`DIA ${formatShortDate(date)}`,`Rodízio: ${WEEKDAYS[rotationDay]} | Consulta diária`,page,allPages);
- if(d)c+=dayRows([d],{...result,rotationDay}).content;
+ let c=basePage(`DIA ${formatShortDate(date)}`,'Uma ou duas pessoas conforme disponibilidade | Consulta diária',page,allPages);
+ if(d)c+=dayRows([d],result).content;
  return c;
 }
-function makeSummary(result,rotationDay,page,allPages){
- let c=basePage('RESUMO ANUAL E CRITÉRIOS',`Rodízio: ${WEEKDAYS[rotationDay]} | Estatísticas de 2026`,page,allPages);
+function makeSummary(result,state,page,allPages){
+ let c=basePage('RESUMO ANUAL E CRITÉRIOS','Escala sem rodízio | Estatísticas de 2026',page,allPages);
  let y=PAGE_H-160;
- const metrics=[['Dias de expediente regular',result.regularDays],['Posições previstas (2 por dia)',result.slots],['Posições preenchidas',result.filled],['Vagas sem cobertura',result.slots-result.filled],['Alertas de distribuição',result.warnings.length]];
+ const metrics=[['Dias de expediente regular',result.regularDays],['Dias com 2 servidores',result.daysWithTwo],['Dias com 1 servidor',result.daysWithOne],['Dias sem servidor',result.daysWithNone],['Comparecimentos totais',result.filled]];
  for(const [label,value] of metrics){c+=txt(label,46,y,10,false);c+=txt(String(value),440,y,10,true);y-=27;}
- y-=20;c+=rect(38,y-27,519,27,'#373435');c+=txt('SERVIDOR',46,y-17,9,true,'#FFFFFF');c+=txt('DEPARTAMENTO',235,y-17,9,true,'#FFFFFF');c+=txt('TOTAL',396,y-17,9,true,'#FFFFFF');c+=txt('RODÍZIOS',468,y-17,9,true,'#FFFFFF');y-=27;
- for(const [i,p] of result.people.entries()){
+ y-=20;c+=rect(38,y-27,519,27,'#373435');c+=txt('SERVIDOR',46,y-17,9,true,'#FFFFFF');c+=txt('DEPARTAMENTO',235,y-17,9,true,'#FFFFFF');c+=txt('TOTAL ANUAL',405,y-17,9,true,'#FFFFFF');y-=27;
+ for(const [i,p] of state.people.entries()){
   if(i%2===1)c+=rect(38,y-27,519,27,'#F6F7F8');
-  c+=txt(p.name,46,y-18,9);c+=txt(p.dept,235,y-18,9);c+=txt(String(result.total[p.id]),403,y-18,9,true);c+=txt(String(result.rotationTotal[p.id]),480,y-18,9,true);y-=27;
+  c+=txt(p.name,46,y-18,9);c+=txt(p.dept,235,y-18,9);c+=txt(String(result.total[p.id]),440,y-18,9,true);y-=27;
  }
  y-=28;
- c+=txt('Atenção: preferências públicas e configuração do rodízio podem alterar o resultado.',42,y,8,false,'#747A82');
- c+=txt('Situações sem cobertura são exibidas como PENDÊNCIA, não como alocações fictícias.',42,y-16,8,false,'#747A82');
+ c+=txt('Critério: até duas pessoas disponíveis por dia, de departamentos distintos.',42,y,8,false,'#747A82');
+ c+=txt('Um servidor sozinho é válido; datas sem ninguém ficam sinalizadas.',42,y-16,8,false,'#747A82');
  return c;
 }
 function compilePDF(contents){
@@ -109,13 +111,12 @@ function compilePDF(contents){
 }
 export function generatePDF(result,state,view){
  const contents=[];
- const rotate=state.rotationDay;
  if(view.mode==='year'){
-  for(let i=0;i<12;i++)contents.push(makeMonth(i,{...result,people:state.people},rotate,i+1,13));
-  contents.push(makeSummary({...result,people:state.people},rotate,13,13));
- } else if(view.mode==='month')contents.push(makeMonth(view.month,result,rotate,1,1));
- else if(view.mode==='week')contents.push(makeWeek(view.week,result,rotate,1,1));
- else contents.push(makeDay(view.date,result,rotate,1,1));
+  for(let i=0;i<12;i++)contents.push(makeMonth(i,result,i+1,13));
+  contents.push(makeSummary(result,state,13,13));
+ } else if(view.mode==='month')contents.push(makeMonth(view.month,result,1,1));
+ else if(view.mode==='week')contents.push(makeWeek(view.week,result,1,1));
+ else contents.push(makeDay(view.date,result,1,1));
  return compilePDF(contents);
 }
 export function downloadPDF(result,state,view){

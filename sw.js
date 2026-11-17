@@ -1,5 +1,5 @@
 /* Escala UTFPR — atualizações: rede primeiro, cache apenas como contingência offline. */
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const CACHE = `escala-utfpr-beta-${VERSION}`;
 const REV = `v=${VERSION}`;
 const SHELL = [
